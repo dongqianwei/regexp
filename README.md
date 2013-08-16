@@ -7,10 +7,11 @@ currently, it only implements a very limited features.
 
 following features are supported:
 
-* .
-* +
-* *
-* ?
-* ()
-* |
-* a-z
+* . any character
+* + one or more
+* * no or more
+* ? no or one
+* () group
+* [] character set
+* | or
+* a-z character range
