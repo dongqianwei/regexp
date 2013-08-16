@@ -1,8 +1,8 @@
 use v5.16;
 use Data::Dump 'dump';
 use constant OMG => 'ε';
-use Test::More tests => 1;
-use subs qw(_genGraph _genId _resetId);
+use Test::More tests => 4;
+use subs qw(_genGraph _genId _resetId _combineGraph);
 
 sub _genNFA {
     my @tokens = split '',shift;
@@ -51,11 +51,23 @@ sub _genGraph {
             ${$tokenMap->{$tokens[0]}} = 1;
             shift @tokens;
         }
+        
+        if ($token eq '|') {
+            my $lGraph = {start => $startId, graph => $graph, end => $curId};
+            my $rGraph = _genGraph @tokens;
+            my $combinedGraph = _combineGraph $lGraph->{graph}, $rGraph->{graph};
+            my $curId = _genId;
+            my $nextId = _genId;
+
+            unshift @{$combinedGraph->{$curId}{+OMG}}, $lGraph->{start};
+            unshift @{$combinedGraph->{$curId}{+OMG}}, $rGraph->{start};
+            unshift @{$combinedGraph->{$lGraph->{end}}{+OMG}}, $nextId;
+            unshift @{$combinedGraph->{$rGraph->{end}}{+OMG}}, $nextId;
+            return {start => $curId, graph => $combinedGraph, end => $nextId};
+        }
 
         if (ref $token) {
-            while (my ($k, $v) = each %{$token->{graph}}) {
-                $graph->{$k} = $v;
-            }
+            $graph = _combineGraph $graph, $token->{graph};
 
             unshift @{$graph->{$curId}{+OMG}}, $token->{start};
             if ($one_or_more_mark) {
@@ -93,6 +105,12 @@ sub _genGraph {
 
     }
     {start => $startId, graph => $graph, end => $curId};
+}
+
+sub _combineGraph {
+    my ($lGraph, $rGraph) = @_;
+    my %graph = (%$lGraph, %$rGraph);
+    \%graph;
 }
 
 sub _combineDFA {
@@ -175,5 +193,11 @@ sub _resetId {
 
 my $regexp = 'abc+d?h*ef(xy(zt)*)+g';
 my $tsStr = 'abcchhhefxyztztxyg';
-
 ok(match($regexp,$tsStr),'one test');
+$regexp = 'abc|def|ghi';
+$tsStr = 'abc';
+ok(match($regexp,$tsStr),'two test');
+$tsStr = 'def';
+ok(match($regexp,$tsStr),'three test');
+$tsStr = 'ghi';
+ok(match($regexp,$tsStr),'four test');
