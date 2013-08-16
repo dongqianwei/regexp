@@ -1,8 +1,12 @@
+package Engine;
 use v5.16;
 use Data::Dump 'dump';
 use constant OMG => 'ε';
-use Test::More tests => 4;
 use subs qw(_genGraph _genId _resetId _combineGraph);
+use base 'Exporter';
+use vars qw(@EXPORT);
+
+@EXPORT = qw(match);
 
 sub _genNFA {
     my @tokens = split '',shift;
@@ -51,7 +55,7 @@ sub _genGraph {
             ${$tokenMap->{$tokens[0]}} = 1;
             shift @tokens;
         }
-        
+
         if ($token eq '|') {
             my $lGraph = {start => $startId, graph => $graph, end => $curId};
             my $rGraph = _genGraph @tokens;
@@ -191,13 +195,4 @@ sub _resetId {
     $id = 0;
 }
 
-my $regexp = 'abc+d?h*ef(xy(zt)*)+g';
-my $tsStr = 'abcchhhefxyztztxyg';
-ok(match($regexp,$tsStr),'one test');
-$regexp = 'abc|def|ghi';
-$tsStr = 'abc';
-ok(match($regexp,$tsStr),'two test');
-$tsStr = 'def';
-ok(match($regexp,$tsStr),'three test');
-$tsStr = 'ghi';
-ok(match($regexp,$tsStr),'four test');
+1;
