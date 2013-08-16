@@ -42,6 +42,9 @@ sub _genGraph {
     my $one_or_more_mark;#+
     my $no_or_one_mark;  #?
 
+    my @square_stack;    #tokens is square bracket
+    my $square_mark;     #square bracket mark
+
     my $tokenMap = {
                     '*' => \$no_or_more_mark,
                     '+' => \$one_or_more_mark,
@@ -54,6 +57,29 @@ sub _genGraph {
         if (exists $tokenMap->{$tokens[0]}) {
             ${$tokenMap->{$tokens[0]}} = 1;
             shift @tokens;
+        }
+
+        if ($token eq '[') {
+            $square_mark = 1;
+            next;
+        }
+
+        if ($square_mark) {
+            if ($token ne ']') {
+                push @square_stack, $token;
+                next;
+            }
+            else {
+                $square_mark = 0;
+                my $switchGraph = {};
+                my $inId = _genId;
+                my $outId = _genId;
+                for my $switchToken (@square_stack) {
+                    $graph->{$inId}{$switchToken} = $outId;
+                }
+                unshift @tokens, {start => $inId, graph => $switchGraph, end => $outId};
+                next;
+            }
         }
 
         if ($token eq '|') {
@@ -69,6 +95,7 @@ sub _genGraph {
             unshift @{$combinedGraph->{$rGraph->{end}}{+OMG}}, $nextId;
             return {start => $curId, graph => $combinedGraph, end => $nextId};
         }
+
 
         if (ref $token) {
             $graph = _combineGraph $graph, $token->{graph};
