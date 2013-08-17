@@ -18,5 +18,5 @@ following features are supported:
 * \ escape
 
 * now you can generate a image file to see NFA or DFA using following methods,this feature require GraphViz2.
-** visualNFA
-** visualDFA
+>* visualNFA
+>* visualDFA
