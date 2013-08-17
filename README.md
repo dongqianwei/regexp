@@ -16,3 +16,7 @@ following features are supported:
 * | or
 * a-z character range
 * \ escape
+
+* now you can generate a image file to see NFA or DFA using following methods,this feature require GraphViz2.
+** visualNFA
+** visualDFA
