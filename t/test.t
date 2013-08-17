@@ -1,5 +1,6 @@
 use v5.16;
 use Engine;
+use Data::Dump 'dump';
 use Test::More tests => 6;
 
 my $regexp = 'abc+d?h*ef(xy(zt)*)+g';
@@ -21,4 +22,5 @@ $regexp = '\+\-\*';
 $tsStr = '+-*';
 ok(match($regexp,$tsStr),'six test');
 
-visualDFA 'abc+d?h*ef(xy(zt)*)+g';
+visualNFA 'abc+d?[tum]+\+\-h*ef(xy(zt)*)+g';
+visualDFA 'abc+d?[tum]+\+\-h*ef(xy(zt)*)+g';

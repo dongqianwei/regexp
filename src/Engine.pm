@@ -4,10 +4,19 @@ use utf8;
 use Carp;
 use Data::Dump 'dump';
 use GraphViz2;
-use constant OMG => 'ε';
-use subs qw(_genGraph _genId _resetId _combineGraph _visualize);
+use constant {OMG => '>',
+              DEBUG => 0,
+              };
+use subs qw(_genGraph _genId _resetId _combineGraph _visualize _debug);
 use base 'Exporter';
 use vars qw(@EXPORT);
+
+sub _debug {
+    return unless DEBUG;
+    my ($name, $para) = @_;
+    my @line = (caller)[2];
+    say "line number: $line[0]| $name: ", dump $para;
+}
 
 @EXPORT = qw(match visualNFA visualDFA);
 
@@ -32,7 +41,9 @@ sub _genNFA {
             push @stack, $graph;
         }
     }
-    _genGraph @stack;
+    my $r =_genGraph @stack;
+    _resetId;
+    $r;
 }
 
 sub _genGraph {
@@ -151,47 +162,83 @@ sub _genGraph {
 }
 
 sub _combineGraph {
-    my ($lGraph, $rGraph) = @_;
-    my %graph = (%$lGraph, %$rGraph);
+    my @graphs = @_;
+    _debug('@graphs',\@graphs);
+    my @omgStack;
+    for my $g (@graphs) {
+        if ($g->{+OMG}) {
+            unshift @omgStack, @{$g->{+OMG}};
+            delete $g->{+OMG};
+        }
+    }
+    _debug('@graphs',\@graphs);
+    my %graph = map {%$_} @graphs;
+    $graph{+OMG} = [@omgStack] if @omgStack;
     \%graph;
 }
 
 sub _combineDFA {
     my $r = shift;
     my $graph = $r->{graph};
+    #iterate all nodes in the graph
     for my $id (sort keys %$graph) {
-        my $paths = $graph->{$id};
-        if (exists $paths->{+OMG} and @{$paths->{+OMG}}) {
-            for my $dupId (@{$paths->{+OMG}}) {
-                for my $dupPath (keys %{$graph->{$dupId}}) {
-                    if ($graph->{$dupId}{$dupPath} ne OMG) {
-                        $paths->{$dupPath} = $graph->{$dupId}{$dupPath};
-                    }
-                    else {
-                        unshift @{$paths->{+OMG}}, @{$graph->{$dupId}{+OMG}};
-                    }
-                }
-                delete $graph->{$dupId};
-                if ($r->{end} eq $dupId) {
-                    $r->{end} = $id;
-                }
-                for my $renameId (sort keys %$graph) {
-                    for my $renamePath (sort grep {$_ ne OMG} keys %{$graph->{$renameId}}) {
-                        if ($graph->{$renameId}{$renamePath} eq $dupId) {
-                            $graph->{$renameId}{$renamePath} = $id;
-                        }
-                    }
-                    if (exists $graph->{$renameId}{+OMG}) {
-                        my %set;
-                        $graph->{$renameId}{+OMG} = [grep {$set{$_}?0:($set{$_} = 1) }
-                                                    grep {$_ ne $renameId}
-                                                    map {$_ ne $dupId? $_:$id} @{$graph->{$renameId}{+OMG}}];
-                    }
+        _debug('id', $id);
+        #all paths of the current nodes
+        #combines all OMG nodes (the same) nodes to current node
+        #processed nodes,key :nodeId; value: whether processed
+        my %processed;
+        my @newFindNodes;
+        my @waitForProcessed = ($id);
+        while (@waitForProcessed) {
+            _debug('waitForProcessed',\@waitForProcessed);
+            my $curIdForComb = shift @waitForProcessed;
+            _debug('curIdForComb',$curIdForComb);
+            #current node processed
+            $processed{$curIdForComb} = 1;
+            _debug('processed',\%processed);
+            _debug('OMG nodes',$graph->{$curIdForComb}{+OMG});
+            #exists unprocessed nodes
+            if (exists $graph->{$curIdForComb}{+OMG} and grep {!$processed{$_}} @{$graph->{$curIdForComb}{+OMG}}) {
+                #store OMG nodes of current nodes
+                @newFindNodes = grep {not exists $processed{$_}} @{$graph->{$curIdForComb}{+OMG}};
+                _debug('newFindNodes', \@newFindNodes);
+                unshift @waitForProcessed, @newFindNodes;
+                _debug('waitForProcessed',\@waitForProcessed);
+                _debug('processed',\%processed);
+                %processed = %processed, map {$_, 0} @newFindNodes;
+            }
+        }
+        my @dupIds = keys %processed;
+        _debug('@dupIds',\@dupIds);
+        next if @dupIds == 1;
+        $graph->{$id} = _combineGraph map {$graph->{$_}} @dupIds;
+        _debug('$graph',$graph);
+        #delete dup nodes of current Id
+        for my $dupId (grep {$_ != $id} @dupIds) {
+            delete $graph->{$dupId};
+        }
 
+        _debug('$graph', $graph);
+
+        for my $renameId (sort keys %$graph) {
+            for my $renamePath (grep {$_ ne OMG} keys %{$graph->{$renameId}}) {
+                if ($processed{$graph->{$renameId}{$renamePath}}) {
+                    $graph->{$renameId}{$renamePath} = $id;
                 }
             }
-            redo;
+            if (exists $graph->{$renameId}{+OMG}) {
+                my %set;
+                $graph->{$renameId}{+OMG} = [grep {$set{$_}?0:($set{$_} = 1) }
+                                            grep {$_ ne $renameId}
+                                            map {$processed{$_} ? $id:$_} @{$graph->{$renameId}{+OMG}}];
+            }
+
         }
+        $r->{end} = $id if $processed{$r->{end}};
+        redo;
+    }
+    for my $nopId (grep {! grep {$_ ne OMG} keys $graph->{$_}} keys %$graph) {
+        delete $graph->{$nopId};
     }
     $r;
 }
@@ -226,15 +273,15 @@ sub match {
 }
 
 sub visualNFA {
-    _visualize _genNFA shift;
+    _visualize ((_genNFA shift), 'nfa');
 }
 
 sub visualDFA {
-    _visualize _combineDFA _genNFA shift;
+    _visualize ((_combineDFA _genNFA shift), 'dfa');
 }
 
 sub _visualize {
-    my $pic = shift;
+    my ($pic, $pname) = @_;
     my ($graph, $start, $end) = @$pic{'graph','start','end'};
     my($viz) = GraphViz2 -> new
         (
@@ -263,7 +310,7 @@ sub _visualize {
             }
         }
     }
-    $viz -> run(format => 'png', output_file => 'out.png');
+    $viz -> run(format => 'png', output_file => $pname.'.png');
 }
 
 my $id;
