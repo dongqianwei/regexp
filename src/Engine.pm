@@ -240,7 +240,7 @@ sub _visualize {
         (
          edge   => {color => 'green'},
          global => {directed => 1},
-         graph  => {label => 'Adult', rankdir => 'TB'},
+         graph  => {label => 'image of state machine', rankdir => 'TB'},
          node   => {shape => 'circle'},
         );
     $viz->add_node(name => $start, color => 'blue');
