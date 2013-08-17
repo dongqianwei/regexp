@@ -1,12 +1,15 @@
 package Engine;
 use v5.16;
+use utf8;
+use Carp;
 use Data::Dump 'dump';
+use GraphViz2;
 use constant OMG => 'ε';
-use subs qw(_genGraph _genId _resetId _combineGraph);
+use subs qw(_genGraph _genId _resetId _combineGraph _visualize);
 use base 'Exporter';
 use vars qw(@EXPORT);
 
-@EXPORT = qw(match);
+@EXPORT = qw(match visualNFA visualDFA);
 
 sub _genNFA {
     my @tokens = split '',shift;
@@ -220,6 +223,47 @@ sub match {
         return 0;
     }
 
+}
+
+sub visualNFA {
+    _visualize _genNFA shift;
+}
+
+sub visualDFA {
+    _visualize _combineDFA _genNFA shift;
+}
+
+sub _visualize {
+    my $pic = shift;
+    my ($graph, $start, $end) = @$pic{'graph','start','end'};
+    my($viz) = GraphViz2 -> new
+        (
+         edge   => {color => 'green'},
+         global => {directed => 1},
+         graph  => {label => 'Adult', rankdir => 'TB'},
+         node   => {shape => 'circle'},
+        );
+    $viz->add_node(name => $start, color => 'blue');
+    $viz->add_node(name => $end, color => 'red');
+    #add nodes
+    for my $nodeId (keys %$graph) {
+        $viz -> add_node(name => $nodeId, color => 'grey') unless $nodeId eq $start;
+    }
+    #add edges
+    for my $nodeId (keys %$graph) {
+        for my $edge (keys %{$graph->{$nodeId}}) {
+            my $to = $graph->{$nodeId}{$edge};
+            if (ref $to) {
+                for my $omgId(@$to) {
+                    $viz -> add_edge(from => $nodeId, to => $omgId, label => $edge);
+                }
+            }
+            else {
+                $viz -> add_edge(from => $nodeId, to => $to, label => $edge);
+            }
+        }
+    }
+    $viz -> run(format => 'png', output_file => 'out.png');
 }
 
 my $id;

@@ -20,3 +20,5 @@ ok(match($regexp,$tsStr),'five test');
 $regexp = '\+\-\*';
 $tsStr = '+-*';
 ok(match($regexp,$tsStr),'six test');
+
+visualDFA 'abc+d?h*ef(xy(zt)*)+g';
