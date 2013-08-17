@@ -54,6 +54,15 @@ sub _genGraph {
     while (@tokens) {
         my $token = shift @tokens;
 
+        if ($token eq '\\') {
+            my $chr = shift @tokens;
+            my ($inId, $outId) = (_genId(), _genId());
+            $token = {start => $inId,
+                              end => $outId,
+                              graph => {$inId => {$chr => $outId}}};
+        }
+
+
         if (exists $tokenMap->{$tokens[0]}) {
             ${$tokenMap->{$tokens[0]}} = 1;
             shift @tokens;

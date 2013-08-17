@@ -15,3 +15,4 @@ following features are supported:
 * [] character set
 * | or
 * a-z character range
+* \ escape
