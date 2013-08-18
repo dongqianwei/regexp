@@ -12,7 +12,7 @@ use base 'Exporter';
 use vars qw(@EXPORT);
 
 sub _debug {
-    return unless DEBUG;
+    return unless DEBUG || $_[2];
     my ($name, $para) = @_;
     my @line = (caller)[2];
     say "line number: $line[0]| $name: ", dump $para;
@@ -23,9 +23,13 @@ sub _debug {
 sub _genNFA {
     my @tokens = split '',shift;
     my @stack;
+    my $bracketCounter;
+    my $catchMap = {};
 
     while (@tokens) {
         my $token = shift @tokens;
+        $bracketCounter ++ if $token eq '(';
+        _debug('bracketCounter', $bracketCounter, $token eq '(');
         if ($token ne ')') {
             push @stack, $token;
             next;
@@ -38,10 +42,13 @@ sub _genNFA {
                 unshift @cache, $chr;
             }
             my $graph = _genGraph @cache;
+            _debug('graph', $graph, 1);
+            $catchMap->{$bracketCounter} = {start => $graph->{start}, end => $graph->{end}};
             push @stack, $graph;
         }
     }
     my $r =_genGraph @stack;
+    $r->{catch} = $catchMap;
     _resetId;
     $r;
 }
@@ -235,6 +242,10 @@ sub _combineDFA {
 
         }
         $r->{end} = $id if $processed{$r->{end}};
+        for my $catchSeqId (keys %{$r->{catch}}) {
+            $r->{catch}{$catchSeqId}{start} = $id if $processed{$r->{catch}{$catchSeqId}{start}};
+            $r->{catch}{$catchSeqId}{end}   = $id if $processed{$r->{catch}{$catchSeqId}{end}};
+        }
         redo;
     }
     for my $nopId (grep {! grep {$_ ne OMG} keys $graph->{$_}} keys %$graph) {
@@ -246,11 +257,38 @@ sub _combineDFA {
 sub match {
     _resetId;
     my ($regexp, $str) = @_;
-    my $dfa = _combineDFA _genNFA $regexp;
-    my $graph = $dfa->{graph};
     my @tokens = split '', $str;
-    my $curId = $dfa->{start};
+    my $dfa = _combineDFA _genNFA $regexp;
+    _debug('$dfa',$dfa,1);
+    my ($catchMark, @catchStack, %catchGroup, $catchdNum);
+    my ($graph, $catch, $curId) = @$dfa{qw(graph catch start)};
     for my $token (@tokens) {
+        #if in catchGroup
+        if (!defined $catchdNum) {
+            ($catchdNum) = grep {$catch->{$_}{start} eq $curId} keys %$catch;
+            _debug('curId', $curId, 1);
+            _debug('catchdNum', $catchdNum, 1);
+        }
+        if (defined $catchdNum) {
+            $catchMark = 1;
+        }
+
+        if ($catchMark) {
+            _debug('curId', $curId, 1);
+            _debug('$catch->{$catchdNum}{end}', $catch->{$catchdNum}{end}, 1);
+            if ($curId eq $catch->{$catchdNum}{end}) {
+                $catchMark = 0;
+                $catchGroup{$catchdNum} = \@catchStack;
+                _debug('catchGroup', \%catchGroup, 1);
+                undef $catchdNum;
+                @catchStack = ();
+            }
+            else {
+              push @catchStack, $token;
+              _debug ('catchStack', \@catchStack, 1);
+            }
+        }
+
         if (exists $graph->{$curId}{$token}) {
             $curId = $graph->{$curId}{$token};
         }
@@ -263,7 +301,7 @@ sub match {
         }
     }
     if ($curId eq $dfa->{end}) {
-        return 1;
+        return [1, \%catchGroup];
     }
     else {
         say dump $dfa;
