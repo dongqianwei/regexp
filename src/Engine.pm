@@ -4,7 +4,7 @@ use utf8;
 use Carp;
 use Data::Dump 'dump';
 use GraphViz2;
-use constant {OMG => '>',
+use constant {OMG => 'ε',
               DEBUG => 0,
               };
 use subs qw(_genGraph _genId _resetId _combineGraph _visualize _debug);
@@ -182,7 +182,7 @@ sub _combineDFA {
     my %dfaMap;
     #iterate all nodes in the graph
     for my $id (sort keys %$graph) {
-        _debug('id', $id);
+        #_debug('id', $id);
         #all paths of the current nodes
         #combines all OMG nodes (the same) nodes to current node
         #processed nodes,key :nodeId; value: whether processed
@@ -210,15 +210,23 @@ sub _combineDFA {
         }
         $dfaMap{$id} = [keys %processed];
     }
+    _debug('dfaMap', \%dfaMap);
     my %dfaGraph;
+    my %endIdSet;
+    $endIdSet{$r->{end}} = 1;
     for my $nodeId (keys %dfaMap) {
         for my $mapedId (@{$dfaMap{$nodeId}}) {
             for my $path (grep {$_ ne +OMG} keys %{$graph->{$mapedId}}) {
                 $dfaGraph{$nodeId}{$path} = $graph->{$mapedId}{$path};
             }
+            #if end point paths are all OMG
+            if (grep {$_ eq $r->{end}} @{$dfaMap{$mapedId}}) {
+                $endIdSet{$mapedId} = 1;
+            }
+
         }
     }
-    {start => $r->{start}, end => $r->{end}, graph => \%dfaGraph};
+    {start => $r->{start}, end => \%endIdSet, graph => \%dfaGraph};
 }
 
 sub match {
@@ -240,7 +248,7 @@ sub match {
             return 0;
         }
     }
-    if ($curId eq $dfa->{end}) {
+    if ($dfa->{end}{$curId}) {
         return 1;
     }
     else {
@@ -260,7 +268,7 @@ sub visualDFA {
 
 sub _visualize {
     my ($pic, $pname) = @_;
-    my ($graph, $start, $end) = @$pic{'graph','start','end'};
+    my ($graph, $start, $endIdSet) = @$pic{'graph','start','end'};
     my($viz) = GraphViz2 -> new
         (
          edge   => {color => 'green'},
@@ -269,10 +277,17 @@ sub _visualize {
          node   => {shape => 'circle'},
         );
     $viz->add_node(name => $start, color => 'blue');
-    $viz->add_node(name => $end, color => 'red');
+    if (ref $endIdSet) {
+        _debug('endIdSet',$endIdSet);
+        $viz->add_node(name => $_, color => 'red') for keys %{$endIdSet};
+    }
+    else {
+        $viz->add_node(name => $endIdSet, color => 'red');
+    }
+
     #add nodes
     for my $nodeId (keys %$graph) {
-        $viz -> add_node(name => $nodeId, color => 'grey') unless $nodeId eq $start or $nodeId eq $end;
+        $viz -> add_node(name => $nodeId, color => 'grey') unless $nodeId eq $start or (ref $endIdSet)?$endIdSet->{$nodeId}:$nodeId eq $endIdSet;
     }
     #add edges
     for my $nodeId (keys %$graph) {
