@@ -26,4 +26,5 @@ $tsStr = '+-*';
 ok(match($regexp,$tsStr),'six test');
 
 visualNFA 'abc+d?[tum]+\+\-h*ef(xy(zt)*)+g';
-visualDFA 'abc+d?[tum]+\+\-h*ef(xy(zt)*)+g';
+visualDFA 'abc+d?[tum]+\+\-h*ef(xy|qpr(zt)*)+g';
+

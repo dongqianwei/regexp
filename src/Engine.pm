@@ -226,6 +226,12 @@ sub _combineDFA {
 
         }
     }
+    my %reachable = map {$_, 1} map {values %{$_}} values %dfaGraph;
+    #delete unreachable nodes, grep start node
+    eval{delete $dfaGraph{$_}; delete $endIdSet{$_}} for
+        grep {$_ ne $r->{start}}
+        grep {!$reachable{$_}} keys %dfaGraph, keys %endIdSet;
+
     {start => $r->{start}, end => \%endIdSet, graph => \%dfaGraph};
 }
 
@@ -276,18 +282,21 @@ sub _visualize {
          graph  => {label => 'image of state machine', rankdir => 'TB'},
          node   => {shape => 'circle'},
         );
+    my %addedNodeSet;
     $viz->add_node(name => $start, color => 'blue');
+    $addedNodeSet{$start} = 1;
     if (ref $endIdSet) {
         _debug('endIdSet',$endIdSet);
-        $viz->add_node(name => $_, color => 'red') for keys %{$endIdSet};
+        do{$viz->add_node(name => $_, color => 'red');$addedNodeSet{$_} = 1} for keys %{$endIdSet};
     }
     else {
         $viz->add_node(name => $endIdSet, color => 'red');
+        $addedNodeSet{$endIdSet} = 1;
     }
 
     #add nodes
     for my $nodeId (keys %$graph) {
-        $viz -> add_node(name => $nodeId, color => 'grey') unless $nodeId eq $start or (ref $endIdSet)?$endIdSet->{$nodeId}:$nodeId eq $endIdSet;
+        $viz -> add_node(name => $nodeId, color => 'grey') unless $addedNodeSet{$nodeId};
     }
     #add edges
     for my $nodeId (keys %$graph) {
@@ -308,7 +317,7 @@ sub _visualize {
 
 my $id;
 sub _genId {
-    $id ++;
+    'S'.$id ++;
 }
 
 sub _resetId {
