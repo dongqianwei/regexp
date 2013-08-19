@@ -21,6 +21,7 @@ sub _debug {
 @EXPORT = qw(match visualNFA visualDFA);
 
 sub _genNFA {
+    _resetId;
     my @tokens = split '',shift;
     my @stack;
     my $bracketCounter;
@@ -29,7 +30,7 @@ sub _genNFA {
     while (@tokens) {
         my $token = shift @tokens;
         $bracketCounter ++ if $token eq '(';
-        _debug('bracketCounter', $bracketCounter, $token eq '(');
+        #_debug('bracketCounter', $bracketCounter, $token eq '(');
         if ($token ne ')') {
             push @stack, $token;
             next;
@@ -42,12 +43,13 @@ sub _genNFA {
                 unshift @cache, $chr;
             }
             my $graph = _genGraph @cache;
-            _debug('graph', $graph, 1);
+            #_debug('graph', $graph, 1);
             $catchMap->{$bracketCounter} = {start => $graph->{start}, end => $graph->{end}};
             push @stack, $graph;
         }
     }
     my $r =_genGraph @stack;
+    $r->{graph}{$r->{end}} = {};
     $r->{catch} = $catchMap;
     _resetId;
     $r;
@@ -170,23 +172,14 @@ sub _genGraph {
 
 sub _combineGraph {
     my @graphs = @_;
-    _debug('@graphs',\@graphs);
-    my @omgStack;
-    for my $g (@graphs) {
-        if ($g->{+OMG}) {
-            unshift @omgStack, @{$g->{+OMG}};
-            delete $g->{+OMG};
-        }
-    }
-    _debug('@graphs',\@graphs);
     my %graph = map {%$_} @graphs;
-    $graph{+OMG} = [@omgStack] if @omgStack;
     \%graph;
 }
 
 sub _combineDFA {
     my $r = shift;
     my $graph = $r->{graph};
+    my %dfaMap;
     #iterate all nodes in the graph
     for my $id (sort keys %$graph) {
         _debug('id', $id);
@@ -197,61 +190,35 @@ sub _combineDFA {
         my @newFindNodes;
         my @waitForProcessed = ($id);
         while (@waitForProcessed) {
-            _debug('waitForProcessed',\@waitForProcessed);
+            #_debug('waitForProcessed',\@waitForProcessed);
             my $curIdForComb = shift @waitForProcessed;
-            _debug('curIdForComb',$curIdForComb);
+            #_debug('curIdForComb',$curIdForComb);
             #current node processed
             $processed{$curIdForComb} = 1;
-            _debug('processed',\%processed);
-            _debug('OMG nodes',$graph->{$curIdForComb}{+OMG});
+            #_debug('processed',\%processed);
+            #_debug('OMG nodes',$graph->{$curIdForComb}{+OMG});
             #exists unprocessed nodes
             if (exists $graph->{$curIdForComb}{+OMG} and grep {!$processed{$_}} @{$graph->{$curIdForComb}{+OMG}}) {
                 #store OMG nodes of current nodes
                 @newFindNodes = grep {not exists $processed{$_}} @{$graph->{$curIdForComb}{+OMG}};
-                _debug('newFindNodes', \@newFindNodes);
+                #_debug('newFindNodes', \@newFindNodes);
                 unshift @waitForProcessed, @newFindNodes;
-                _debug('waitForProcessed',\@waitForProcessed);
-                _debug('processed',\%processed);
+                #_debug('waitForProcessed',\@waitForProcessed);
+                #_debug('processed',\%processed);
                 %processed = %processed, map {$_, 0} @newFindNodes;
             }
         }
-        my @dupIds = keys %processed;
-        _debug('@dupIds',\@dupIds);
-        next if @dupIds == 1;
-        $graph->{$id} = _combineGraph map {$graph->{$_}} @dupIds;
-        _debug('$graph',$graph);
-        #delete dup nodes of current Id
-        for my $dupId (grep {$_ != $id} @dupIds) {
-            delete $graph->{$dupId};
-        }
-
-        _debug('$graph', $graph);
-
-        for my $renameId (sort keys %$graph) {
-            for my $renamePath (grep {$_ ne OMG} keys %{$graph->{$renameId}}) {
-                if ($processed{$graph->{$renameId}{$renamePath}}) {
-                    $graph->{$renameId}{$renamePath} = $id;
-                }
-            }
-            if (exists $graph->{$renameId}{+OMG}) {
-                my %set;
-                $graph->{$renameId}{+OMG} = [grep {$set{$_}?0:($set{$_} = 1) }
-                                            grep {$_ ne $renameId}
-                                            map {$processed{$_} ? $id:$_} @{$graph->{$renameId}{+OMG}}];
-            }
-
-        }
-        $r->{end} = $id if $processed{$r->{end}};
-        for my $catchSeqId (keys %{$r->{catch}}) {
-            $r->{catch}{$catchSeqId}{start} = $id if $processed{$r->{catch}{$catchSeqId}{start}};
-            $r->{catch}{$catchSeqId}{end}   = $id if $processed{$r->{catch}{$catchSeqId}{end}};
-        }
-        redo;
+        $dfaMap{$id} = [keys %processed];
     }
-    for my $nopId (grep {! grep {$_ ne OMG} keys $graph->{$_}} keys %$graph) {
-        delete $graph->{$nopId};
+    my %dfaGraph;
+    for my $nodeId (keys %dfaMap) {
+        for my $mapedId (@{$dfaMap{$nodeId}}) {
+            for my $path (grep {$_ ne +OMG} keys %{$graph->{$mapedId}}) {
+                $dfaGraph{$nodeId}{$path} = $graph->{$mapedId}{$path};
+            }
+        }
     }
-    $r;
+    {start => $r->{start}, end => $r->{end}, graph => \%dfaGraph};
 }
 
 sub match {
@@ -259,36 +226,9 @@ sub match {
     my ($regexp, $str) = @_;
     my @tokens = split '', $str;
     my $dfa = _combineDFA _genNFA $regexp;
-    _debug('$dfa',$dfa,1);
-    my ($catchMark, @catchStack, %catchGroup, $catchdNum);
+    #_debug('$dfa',$dfa,1);
     my ($graph, $catch, $curId) = @$dfa{qw(graph catch start)};
     for my $token (@tokens) {
-        #if in catchGroup
-        if (!defined $catchdNum) {
-            ($catchdNum) = grep {$catch->{$_}{start} eq $curId} keys %$catch;
-            _debug('curId', $curId, 1);
-            _debug('catchdNum', $catchdNum, 1);
-        }
-        if (defined $catchdNum) {
-            $catchMark = 1;
-        }
-
-        if ($catchMark) {
-            _debug('curId', $curId, 1);
-            _debug('$catch->{$catchdNum}{end}', $catch->{$catchdNum}{end}, 1);
-            if ($curId eq $catch->{$catchdNum}{end}) {
-                $catchMark = 0;
-                $catchGroup{$catchdNum} = \@catchStack;
-                _debug('catchGroup', \%catchGroup, 1);
-                undef $catchdNum;
-                @catchStack = ();
-            }
-            else {
-              push @catchStack, $token;
-              _debug ('catchStack', \@catchStack, 1);
-            }
-        }
-
         if (exists $graph->{$curId}{$token}) {
             $curId = $graph->{$curId}{$token};
         }
@@ -301,7 +241,7 @@ sub match {
         }
     }
     if ($curId eq $dfa->{end}) {
-        return [1, \%catchGroup];
+        return 1;
     }
     else {
         say dump $dfa;
@@ -332,7 +272,7 @@ sub _visualize {
     $viz->add_node(name => $end, color => 'red');
     #add nodes
     for my $nodeId (keys %$graph) {
-        $viz -> add_node(name => $nodeId, color => 'grey') unless $nodeId eq $start;
+        $viz -> add_node(name => $nodeId, color => 'grey') unless $nodeId eq $start or $nodeId eq $end;
     }
     #add edges
     for my $nodeId (keys %$graph) {
