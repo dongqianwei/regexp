@@ -5,13 +5,7 @@ use Test::More tests => 6;
 
 my $regexp = 'abc+d?h*ef(xy(zt)*)+g';
 my $tsStr = 'abcchhhefxyztztxyg';
-
 ok(match($regexp,$tsStr),'one test');
-
-$regexp = 'abc|def|ghi';
-visualNFA $regexp;
-visualDFA $regexp;
-
 $tsStr = 'abc';
 ok(match($regexp,$tsStr),'two test');
 $tsStr = 'def';
