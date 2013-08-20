@@ -218,10 +218,10 @@ sub _combineDFA {
             for my $path (grep {$_ ne +OMG} keys %{$graph->{$mapedId}}) {
                 $dfaGraph{$nodeId}{$path} = $graph->{$mapedId}{$path};
             }
-            #if end point paths are all OMG
-            if (grep {$_ eq $r->{end}} @{$dfaMap{$mapedId}}) {
-                $endIdSet{$mapedId} = 1;
-            }
+            ##if end point paths are all OMG
+            #if (grep {$_ eq $r->{end}} @{$dfaMap{$mapedId}}) {
+            #    $endIdSet{$mapedId} = 1;
+            #}
 
         }
     }

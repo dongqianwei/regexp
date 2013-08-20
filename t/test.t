@@ -1,7 +1,7 @@
 use v5.16;
 use Engine;
 use Data::Dump 'dump';
-use Test::More tests => 9;
+use Test::More tests => 10;
 
 ok(Engine::_compareHash({a=>1,b=>2},{b=>2,a=>1}),'compare hash test1');
 ok(!Engine::_compareHash({a=>2,b=>2},{b=>2,a=>1}),'compare hash test2');
@@ -25,6 +25,10 @@ ok(match($regexp,$tsStr),'8 test');
 $regexp = '\+\-\*';
 $tsStr = '+-*';
 ok(match($regexp,$tsStr),'9 test');
+
+$regexp = 'a?b?c?';
+$tsStr = 'abc';
+ok(match($regexp,$tsStr),'10 test');
 
 $regexp = 'abc+d?[tum]+\+\-h*ef(xy|qpr(zt)*)+g';
 visualNFA $regexp;
