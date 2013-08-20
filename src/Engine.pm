@@ -5,9 +5,9 @@ use Carp;
 use Data::Dump 'dump';
 use GraphViz2;
 use constant {OMG => 'ε',
-              DEBUG => 0,
+              DEBUG => 1,
               };
-use subs qw(_genGraph _genId _resetId _combineGraph _visualize _debug);
+use subs qw(_genGraph _genId _resetId _combineGraph _visualize _debug _compareHash);
 use base 'Exporter';
 use vars qw(@EXPORT);
 
@@ -15,7 +15,6 @@ sub _debug {
     return unless DEBUG || $_[2];
     my ($name, $para) = @_;
     my @line = (caller)[2];
-    say "line number: $line[0]| $name: ", dump $para;
 }
 
 @EXPORT = qw(match visualNFA visualDFA);
@@ -226,13 +225,42 @@ sub _combineDFA {
 
         }
     }
-    my %reachable = map {$_, 1} map {values %{$_}} values %dfaGraph;
+
+    #reduce dfa
+    my @nodes = grep {$_ ne $r->{start}} grep {!$endIdSet{$_}} keys %dfaGraph;
+    while (@nodes) {
+        my $node = shift @nodes;
+        my @dupNodes;
+        for my $id (@nodes) {
+            unshift @dupNodes, $id if _compareHash($dfaGraph{$node}, $dfaGraph{$id});
+        }
+        next unless @dupNodes;
+        delete $dfaGraph{$_} for @dupNodes;
+        my %dupNodesSet = map {$_,1} @dupNodes;
+        @nodes = grep {!$dupNodesSet{$_}} @nodes;
+        for my $nodeId (keys %dfaGraph) {
+            for my $path (keys %{$dfaGraph{$nodeId}}) {
+                if ($dupNodesSet{$dfaGraph{$nodeId}{$path}}) {
+                    $dfaGraph{$nodeId}{$path} = $node;
+                }
+            }
+        }
+    }
+
     #delete unreachable nodes, grep start node
+    my %reachable = map {$_, 1} map {values %{$_}} values %dfaGraph;
     eval{delete $dfaGraph{$_}; delete $endIdSet{$_}} for
         grep {$_ ne $r->{start}}
         grep {!$reachable{$_}} keys %dfaGraph, keys %endIdSet;
 
     {start => $r->{start}, end => \%endIdSet, graph => \%dfaGraph};
+}
+
+sub _compareHash {
+    my ($h1, $h2) = @_;
+    return 0 if scalar keys %{$h1} != scalar keys %{$h2};
+    do {return 0 if $h1->{$_} ne $h2->{$_}} for keys %{$h1};
+    return 1;
 }
 
 sub match {
