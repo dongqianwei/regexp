@@ -180,8 +180,8 @@ sub _combineDFA {
     my $graph = $r->{graph};
     my %dfaMap;
     #iterate all nodes in the graph
+    #creat the dfa node to dfa nodes Set mapping
     for my $id (sort keys %$graph) {
-        #_debug('id', $id);
         #all paths of the current nodes
         #combines all OMG nodes (the same) nodes to current node
         #processed nodes,key :nodeId; value: whether processed
@@ -189,27 +189,21 @@ sub _combineDFA {
         my @newFindNodes;
         my @waitForProcessed = ($id);
         while (@waitForProcessed) {
-            #_debug('waitForProcessed',\@waitForProcessed);
             my $curIdForComb = shift @waitForProcessed;
-            #_debug('curIdForComb',$curIdForComb);
             #current node processed
             $processed{$curIdForComb} = 1;
-            #_debug('processed',\%processed);
-            #_debug('OMG nodes',$graph->{$curIdForComb}{+OMG});
             #exists unprocessed nodes
             if (exists $graph->{$curIdForComb}{+OMG} and grep {!$processed{$_}} @{$graph->{$curIdForComb}{+OMG}}) {
                 #store OMG nodes of current nodes
                 @newFindNodes = grep {not exists $processed{$_}} @{$graph->{$curIdForComb}{+OMG}};
-                #_debug('newFindNodes', \@newFindNodes);
                 unshift @waitForProcessed, @newFindNodes;
-                #_debug('waitForProcessed',\@waitForProcessed);
-                #_debug('processed',\%processed);
                 %processed = %processed, map {$_, 0} @newFindNodes;
             }
         }
+        #store the mapping
         $dfaMap{$id} = [keys %processed];
     }
-    _debug('dfaMap', \%dfaMap);
+
     my %dfaGraph;
     my %endIdSet;
     $endIdSet{$r->{end}} = 1;
@@ -218,11 +212,10 @@ sub _combineDFA {
             for my $path (grep {$_ ne +OMG} keys %{$graph->{$mapedId}}) {
                 $dfaGraph{$nodeId}{$path} = $graph->{$mapedId}{$path};
             }
-            ##if end point paths are all OMG
-            #if (grep {$_ eq $r->{end}} @{$dfaMap{$mapedId}}) {
-            #    $endIdSet{$mapedId} = 1;
-            #}
-
+            #if maped Ids contains endId in $graph
+            if ($mapedId eq $r->{end}) {
+                $endIdSet{$nodeId} = 1;
+            }
         }
     }
 
@@ -253,6 +246,7 @@ sub _combineDFA {
         grep {$_ ne $r->{start}}
         grep {!$reachable{$_}} keys %dfaGraph, keys %endIdSet;
 
+    #create result
     {start => $r->{start}, end => \%endIdSet, graph => \%dfaGraph};
 }
 
